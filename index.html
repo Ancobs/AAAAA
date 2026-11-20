@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="es"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>ContaEC – Contabilidad para Ecuador</title>
+<style>
+:root{--bg:#f3f6fa;--card:#fff;--tx:#1e293b;--mu:#64748b;--pr:#1d4ed8;--pr2:#dbeafe;--bd:#e2e8f0;--ok:#15803d;--er:#b91c1c;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0f172a;--card:#1e293b;--tx:#e2e8f0;--mu:#94a3b8;--pr:#60a5fa;--pr2:#1e3a5f;--bd:#334155;--ok:#4ade80;--er:#f87171}}
+:root[data-theme="dark"]{--bg:#0f172a;--card:#1e293b;--tx:#e2e8f0;--mu:#94a3b8;--pr:#60a5fa;--pr2:#1e3a5f;--bd:#334155;--ok:#4ade80;--er:#f87171}
+*{box-sizing:border-box}html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--tx);font:15px system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+header{background:#1e3a8a;color:#fff;padding:12px 16px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px}
+header b{font-size:18px}.demo{background:#fbbf24;color:#451a03;padding:2px 8px;border-radius:99px;font-size:12px;font-weight:700}
+nav{display:flex;gap:4px;overflow-x:auto;background:var(--card);border-bottom:1px solid var(--bd);padding:6px}
+nav button{white-space:nowrap;border:0;background:none;color:var(--mu);padding:8px 12px;border-radius:8px;font-size:14px;cursor:pointer}
+nav button.on{background:var(--pr2);color:var(--pr);font-weight:700}
+main{max-width:980px;margin:0 auto;padding:14px}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:14px;margin-bottom:14px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.kpi small{color:var(--mu);display:block}.kpi b{font-size:20px}
+h2{margin:0 0 10px;font-size:17px}
+.tw{overflow-x:auto}table{border-collapse:collapse;width:100%;font-size:13px}
+th,td{padding:6px 8px;border-bottom:1px solid var(--bd);text-align:left;white-space:nowrap}
+th{color:var(--mu);font-weight:600}.n{text-align:right;font-variant-numeric:tabular-nums}
+input,select{background:var(--bg);color:var(--tx);border:1px solid var(--bd);border-radius:8px;padding:8px;font-size:14px;max-width:100%}
+.btn{background:var(--pr);color:#fff;border:0;border-radius:8px;padding:9px 14px;font-size:14px;cursor:pointer}
+.btn.g{background:var(--pr2);color:var(--pr)}.btn.r{background:none;color:var(--er);border:1px solid var(--er)}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px}
+.ok{color:var(--ok)}.er{color:var(--er)}.mu{color:var(--mu)}
+.bar{height:16px;border-radius:4px;margin:3px 0}
+</style></head><body>
+<header><b>ContaEC · Contabilidad Ecuador</b><span id="demo"></span></header>
+<nav id="nav"></nav>
+<main id="v"></main>
+<script>
+const NAV=[["panel","Panel"],["nuevo","Nuevo asiento"],["ventas","Ventas"],["compras","Compras"],["inv","Inventario"],["mov","Ingresos y egresos"],["banco","Bancos y flujo"],["fin","Finanzas"],["pres","Presupuesto"],["ter","Clientes y proveedores"],["diario","Libro diario"],["mayor","Libro mayor"],["bc","Balance de comprobación"],["eeff","Estados financieros"],["plan","Plan de cuentas"],["ajustes","Ajustes"]];
+const TIPOS={A:"Activo",P:"Pasivo",Pt:"Patrimonio",I:"Ingreso",G:"Gasto"};
+const PLAN0=[["1.1.01","Caja","A"],["1.1.02","Bancos","A"],["1.1.03","Cuentas por cobrar clientes","A"],["1.1.04","Inventario de mercaderías","A"],["1.1.05","IVA crédito tributario","A"],["1.2.01","Muebles y equipos","A"],["2.1.01","Cuentas por pagar proveedores","P"],["2.1.02","IVA por pagar","P"],["2.1.03","Retenciones por pagar","P"],["3.1.01","Capital","Pt"],["3.1.02","Resultados acumulados","Pt"],["4.1.01","Ventas","I"],["4.1.02","Otros ingresos","I"],["5.1.01","Costo de ventas","G"],["5.2.01","Sueldos y salarios","G"],["5.2.02","Arriendo","G"],["5.2.03","Servicios básicos","G"],["5.2.04","Otros gastos","G"]];
+let S={demo:false,iva:15,plan:PLAN0.map(a=>({c:a[0],n:a[1],t:a[2]})),as:[],cerrado:""};
+try{const x=localStorage.getItem("contaec");if(x)S=JSON.parse(x)}catch(e){}
+S.pres=S.pres||{};S.conc=S.conc||{};S.ext=S.ext||0;S.ter=S.ter||[];S.prod=S.prod||[];S.docs=S.docs||[];
+const save=()=>{try{localStorage.setItem("contaec",JSON.stringify(S))}catch(e){}};
+const $=id=>document.getElementById(id);
+const m=n=>"$"+(+n).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2});
+const nm=c=>{const a=S.plan.find(x=>x.c===c);return a?a.c+" "+a.n:c};
+const r2=n=>Math.round(n*100)/100;
+let tab="panel",draft=[],dh="",mc="";
+function saldos(){const o={};S.plan.forEach(a=>o[a.c]={d:0,h:0,a});S.as.forEach(e=>e.l.forEach(l=>{if(o[l.c]){o[l.c].d+=l.d;o[l.c].h+=l.h}}));return o}
+const nat=a=>(a.t==="A"||a.t==="G")?1:-1;
+const sal=x=>nat(x.a)*(x.d-x.h);
+function nav(){$("nav").innerHTML=NAV.map(n=>`<button class="${tab===n[0]?"on":""}" onclick="go('${n[0]}')">${n[1]}</button>`).join("");$("demo").innerHTML=S.demo?'<span class="demo">DATOS DE DEMOSTRACIÓN</span>':""}
+function go(t){tab=t;render()}
+function render(){nav();$("v").innerHTML=V[tab]();if(tab==="nuevo")drawDraft()}
+const V={
+panel(){const s=saldos(),g=t=>Object.values(s).filter(x=>x.a.t===t).reduce((a,x)=>a+sal(x),0);
+const caja=sal(s["1.1.01"])+sal(s["1.1.02"]),ing=g("I"),gas=g("G"),u=ing-gas,mx=Math.max(ing,gas,1);
+return`<div class="grid"><div class="card kpi"><small>Ingresos</small><b>${m(ing)}</b></div><div class="card kpi"><small>Gastos</small><b>${m(gas)}</b></div><div class="card kpi"><small>${u>=0?"Utilidad":"Pérdida"}</small><b class="${u>=0?"ok":"er"}">${m(u)}</b></div><div class="card kpi"><small>Caja y bancos</small><b>${m(caja)}</b></div><div class="card kpi"><small>Por cobrar</small><b>${m(sal(s["1.1.03"]))}</b></div><div class="card kpi"><small>Por pagar</small><b>${m(sal(s["2.1.01"]))}</b></div><div class="card kpi"><small>IVA por pagar − crédito</small><b>${m(sal(s["2.1.02"])-sal(s["1.1.05"]))}</b></div></div>
+<div class="card"><h2>Ingresos vs gastos</h2><div class="mu">Ingresos</div><div class="bar" style="width:${ing/mx*100}%;background:var(--ok)"></div><div class="mu">Gastos</div><div class="bar" style="width:${gas/mx*100}%;background:var(--er)"></div></div>
+<div class="card mu">${S.as.length?S.as.length+" asientos registrados.":"Aún no hay asientos. Registra el primero en «Nuevo asiento» o carga datos de demostración en «Ajustes»."}</div>`},
+nuevo(){const op=S.plan.map(a=>`<option value="${a.c}">${a.c} ${a.n}</option>`).join("");
+return`<div class="card"><h2>Asistente de asiento</h2><p class="mu">Elige la operación; se propone el asiento y tú lo revisas antes de confirmar. Nada se registra sin tu autorización.</p>
+<div class="row"><select id="op"><option value="compra">Compra de mercadería</option><option value="venta">Venta</option><option value="gasto">Gasto</option><option value="cobro">Cobro a cliente</option><option value="pago">Pago a proveedor</option></select>
+<input id="mb" type="number" step="0.01" placeholder="Valor sin IVA" style="width:140px">
+<select id="fp"><option value="c">Contado (Caja)</option><option value="b">Bancos</option><option value="k">A crédito</option></select>
+<label class="mu">IVA <input id="iv" type="number" value="${S.iva}" style="width:60px">%</label>
+<button class="btn" onclick="sugerir()">Sugerir asiento</button></div><div id="why" class="mu"></div></div>
+<div class="card"><h2>Asiento (editable)</h2><div class="row"><input id="fe" type="date" value="${new Date().toISOString().slice(0,10)}"><input id="ds" placeholder="Descripción" style="flex:1;min-width:180px" value="${dh}"></div>
+<div class="tw"><table><thead><tr><th>Cuenta</th><th>Debe</th><th>Haber</th><th></th></tr></thead><tbody id="dl"></tbody></table></div>
+<div class="row" style="margin-top:8px"><button class="btn g" onclick="addL()">+ Línea</button><span id="cu"></span><button class="btn" onclick="confirmar()">Confirmar y registrar</button></div></div>`},
+diario(){if(!S.as.length)return'<div class="card mu">Sin asientos.</div>';
+return`<div class="card"><h2>Libro diario</h2><div class="tw"><table><thead><tr><th>Fecha</th><th>N.º</th><th>Descripción / Cuenta</th><th class="n">Debe</th><th class="n">Haber</th></tr></thead><tbody>${S.as.map(e=>`<tr style="background:var(--pr2)"><td>${e.f}</td><td>${String(e.n).padStart(5,"0")}</td><td colspan="2"><b>${e.ds||"—"}</b></td><td class="n"><button class="btn r" style="padding:2px 8px" onclick="anular(${e.n})">Anular</button></td></tr>`+e.l.map(l=>`<tr><td></td><td></td><td>${l.h?"&nbsp;&nbsp;&nbsp;&nbsp;":""}${nm(l.c)}</td><td class="n">${l.d?m(l.d):""}</td><td class="n">${l.h?m(l.h):""}</td></tr>`).join("")).join("")}</tbody></table></div></div>`},
+mayor(){const sel=`<select onchange="mc=this.value;render()"><option value="">Selecciona una cuenta…</option>${S.plan.map(a=>`<option value="${a.c}" ${a.c===mc?"selected":""}>${a.c} ${a.n}</option>`).join("")}</select>`;
+let t="";if(mc){const a=S.plan.find(x=>x.c===mc);let sd=0;const rows=[];S.as.forEach(e=>e.l.filter(l=>l.c===mc).forEach(l=>{sd+=nat(a)*(l.d-l.h);rows.push(`<tr><td>${e.f}</td><td>${String(e.n).padStart(5,"0")}</td><td>${e.ds||""}</td><td class="n">${l.d?m(l.d):""}</td><td class="n">${l.h?m(l.h):""}</td><td class="n">${m(sd)}</td></tr>`)}));
+t=`<div class="tw"><table><thead><tr><th>Fecha</th><th>N.º</th><th>Descripción</th><th class="n">Debe</th><th class="n">Haber</th><th class="n">Saldo</th></tr></thead><tbody>${rows.join("")||'<tr><td colspan="6" class="mu">Sin movimientos</td></tr>'}</tbody></table></div>`}
+return`<div class="card"><h2>Libro mayor</h2><div class="row">${sel}</div>${t}</div>`},
+bc(){const s=Object.values(saldos()).filter(x=>x.d||x.h);let D=0,H=0;
+const rows=s.map(x=>{D+=x.d;H+=x.h;return`<tr><td>${x.a.c}</td><td>${x.a.n}</td><td class="n">${m(x.d)}</td><td class="n">${m(x.h)}</td><td class="n">${m(Math.max(x.d-x.h,0))}</td><td class="n">${m(Math.max(x.h-x.d,0))}</td></tr>`}).join("");
+const ok=r2(D)===r2(H);
+return`<div class="card"><h2>Balance de comprobación</h2><div class="tw"><table><thead><tr><th>Código</th><th>Cuenta</th><th class="n">Debe</th><th class="n">Haber</th><th class="n">Saldo deudor</th><th class="n">Saldo acreedor</th></tr></thead><tbody>${rows||'<tr><td colspan="6" class="mu">Sin movimientos</td></tr>'}<tr><th colspan="2">Totales</th><th class="n">${m(D)}</th><th class="n">${m(H)}</th><th></th><th></th></tr></tbody></table></div><p class="${ok?"ok":"er"}">${ok?"✔ Los libros cuadran (Debe = Haber).":"✘ Descuadre de "+m(Math.abs(D-H))}</p></div>`},
+eeff(){const s=Object.values(saldos());const L=t=>s.filter(x=>x.a.t===t&&(x.d||x.h));const T=t=>L(t).reduce((a,x)=>a+sal(x),0);
+const sec=(t,tt)=>`<h2>${tt}</h2><table>${L(t).map(x=>`<tr><td>${x.a.n}</td><td class="n">${m(sal(x))}</td></tr>`).join("")}<tr><th>Total</th><th class="n">${m(T(t))}</th></tr></table>`;
+const u=T("I")-T("G");
+return`<div class="card">${sec("I","Estado de resultados · Ingresos")}${sec("G","Gastos")}<h2 class="${u>=0?"ok":"er"}">${u>=0?"Utilidad":"Pérdida"} del período: ${m(u)}</h2></div>
+<div class="card">${sec("A","Estado de situación financiera · Activos")}${sec("P","Pasivos")}${sec("Pt","Patrimonio")}<table><tr><td>Resultado del período</td><td class="n">${m(u)}</td></tr><tr><th>Pasivo + Patrimonio + Resultado</th><th class="n">${m(T("P")+T("Pt")+u)}</th></tr></table><p class="${r2(T("A"))===r2(T("P")+T("Pt")+u)?"ok":"er"}">${r2(T("A"))===r2(T("P")+T("Pt")+u)?"✔ Activo = Pasivo + Patrimonio":"✘ La ecuación contable no cuadra"}</p></div>`},
+plan(){return`<div class="card"><h2>Plan de cuentas</h2><div class="row"><input id="pc" placeholder="Código" style="width:90px"><input id="pn" placeholder="Nombre" style="flex:1;min-width:140px"><select id="pt">${Object.entries(TIPOS).map(([k,v])=>`<option value="${k}">${v}</option>`).join("")}</select><button class="btn" onclick="addCta()">Agregar</button></div><div class="tw"><table><thead><tr><th>Código</th><th>Cuenta</th><th>Tipo</th></tr></thead><tbody>${S.plan.map(a=>`<tr><td>${a.c}</td><td>${a.n}</td><td>${TIPOS[a.t]}</td></tr>`).join("")}</tbody></table></div></div>`},
+ventas(){return V.docs("venta")},compras(){return V.docs("compra")},
+docs(tipo){const v=tipo==="venta",ter=S.ter.filter(x=>x.t===(v?"c":"p")),L=S.docs.filter(d=>d.tipo===tipo).slice().reverse(),hoy=new Date().toISOString().slice(0,10);
+const tn=id=>(S.ter.find(x=>x.id==id)||{}).n||"—",pn=id=>(S.prod.find(x=>x.id==id)||{}).n||"—";
+if(!ter.length||!S.prod.length)return`<div class="card">Primero crea al menos un ${v?"cliente":"proveedor"} y un producto en «Clientes y proveedores» e «Inventario».</div>`;
+const T=L.reduce((a,d)=>a+d.b,0),I=L.reduce((a,d)=>a+d.iv,0),P=L.reduce((a,d)=>a+pend(d),0);
+return`<div class="card"><h2>${v?"Registrar venta":"Registrar compra"}</h2><div class="row"><input id="dfe" type="date" value="${hoy}"><select id="dt">${ter.map(x=>`<option value="${x.id}">${x.n}</option>`).join("")}</select><select id="dp">${S.prod.map(x=>`<option value="${x.id}">${x.n}</option>`).join("")}</select><input id="dq" type="number" placeholder="Cantidad" style="width:90px"><input id="du" type="number" step="0.01" placeholder="Precio unit. sin IVA" style="width:130px"><select id="df"><option value="c">Contado (Caja)</option><option value="b">Bancos</option><option value="k">A crédito</option></select><label class="mu">Vence <input id="dv" type="date"></label><button class="btn" onclick="regDoc('${tipo}')">Registrar</button></div><p class="mu">Genera el asiento automáticamente tras tu confirmación. Un producto por documento en esta fase.</p></div>
+<div class="card"><h2>Historial</h2><p>Base ${m(T)} · IVA ${m(I)} · Pendiente ${m(P)}</p><div class="tw"><table><thead><tr><th>Fecha</th><th>${v?"Cliente":"Proveedor"}</th><th>Producto</th><th class="n">Cant.</th><th class="n">Total</th><th class="n">Pendiente</th><th>Vence</th><th></th></tr></thead><tbody>${L.map(d=>{const p=pend(d),ve=p>0&&d.venc&&d.venc<hoy;return`<tr><td>${d.f}</td><td>${tn(d.ter)}</td><td>${pn(d.p)}</td><td class="n">${d.q}</td><td class="n">${m(d.t)}</td><td class="n ${p>0?"er":"ok"}">${m(p)}</td><td class="${ve?"er":""}">${d.venc||""}${ve?" ⚠ vencida":""}</td><td>${p>0?`<button class="btn g" style="padding:2px 8px" onclick="abonar(${d.id})">${v?"Cobrar":"Pagar"}</button>`:""}</td></tr>`}).join("")||'<tr><td colspan="8" class="mu">Sin registros</td></tr>'}</tbody></table></div></div>`},
+inv(){const o=Object.values(inv());return`<div class="card"><h2>Nuevo producto</h2><div class="row"><input id="pn2" placeholder="Nombre" style="flex:1;min-width:140px"><input id="pv2" type="number" step="0.01" placeholder="Precio venta" style="width:110px"><input id="pm2" type="number" placeholder="Mínimo" value="5" style="width:80px"><button class="btn" onclick="addProd()">Agregar</button></div></div><div class="card"><h2>Inventario (costo promedio)</h2><div class="tw"><table><thead><tr><th>Producto</th><th class="n">Stock</th><th class="n">Costo prom.</th><th class="n">Valor</th><th class="n">P. venta</th><th></th></tr></thead><tbody>${o.map(x=>`<tr><td>${x.p.n}</td><td class="n">${x.q}</td><td class="n">${m(x.q>0?x.v/x.q:0)}</td><td class="n">${m(x.v)}</td><td class="n">${m(x.p.pv||0)}</td><td class="er">${x.q<=(x.p.min||0)?"⚠ stock bajo":""}</td></tr>`).join("")||'<tr><td colspan="6" class="mu">Sin productos</td></tr>'}</tbody></table></div></div>${kardex()}`},
+mov(){const M=S.as.filter(e=>e.mv).slice().reverse(),tot={};M.forEach(e=>{const v=e.l.reduce((a,l)=>a+l.d,0);tot[e.mv.c]=(tot[e.mv.c]||0)+v});
+return`<div class="card"><h2>Registrar ingreso o egreso</h2><div class="row"><input id="mfe" type="date" value="${new Date().toISOString().slice(0,10)}"><select id="mt" onchange="catSel()"><option value="i">Ingreso</option><option value="e">Egreso</option></select><select id="mcat">${CATS.i.map(c=>`<option value="${c[0]}">${c[1]}</option>`).join("")}</select><select id="mb"><option value="c">Caja</option><option value="b">Bancos</option></select><input id="mv" type="number" step="0.01" placeholder="Valor" style="width:100px"><input id="mor" placeholder="Origen / destino" style="width:150px"><input id="mco" placeholder="N.º comprobante" style="width:130px"><button class="btn" onclick="regMov()">Registrar</button></div><p class="mu">Genera el asiento tras tu confirmación. Para operaciones con IVA usa Compras, Ventas o un asiento manual.</p></div>
+<div class="card"><h2>Por categoría</h2>${Object.entries(tot).map(([c,v])=>`<div class="row" style="justify-content:space-between"><span>${nm(c)}</span><b>${m(v)}</b></div>`).join("")||'<span class="mu">Sin movimientos</span>'}</div>
+<div class="card"><h2>Movimientos</h2><div class="tw"><table><thead><tr><th>Fecha</th><th>Tipo</th><th>Descripción</th><th class="n">Valor</th></tr></thead><tbody>${M.map(e=>`<tr><td>${e.f}</td><td class="${e.mv.t==="i"?"ok":"er"}">${e.mv.t==="i"?"Ingreso":"Egreso"}</td><td>${e.ds}</td><td class="n">${m(e.l.reduce((a,l)=>a+l.d,0))}</td></tr>`).join("")||'<tr><td colspan="4" class="mu">Sin registros</td></tr>'}</tbody></table></div></div>`},
+banco(){const mes={};S.as.slice().sort((a,b)=>a.f<b.f?-1:1).forEach(e=>e.l.forEach(l=>{if(l.c==="1.1.01"||l.c==="1.1.02"){const k=e.f.slice(0,7);mes[k]=mes[k]||{i:0,o:0};mes[k].i+=l.d;mes[k].o+=l.h}}));let ac=0;
+const fl=Object.entries(mes).sort().map(([k,x])=>{ac+=x.i-x.o;return`<tr><td>${k}</td><td class="n ok">${m(x.i)}</td><td class="n er">${m(x.o)}</td><td class="n">${m(x.i-x.o)}</td><td class="n">${m(ac)}</td></tr>`}).join("");
+const B=[];let lib=0,cn=0;S.as.forEach(e=>e.l.forEach((l,i)=>{if(l.c==="1.1.02"){const k=e.n+":"+i,ok=!!S.conc[k];lib+=l.d-l.h;if(ok)cn+=l.d-l.h;B.push(`<tr><td><input type="checkbox" ${ok?"checked":""} onchange="S.conc['${k}']=this.checked;save();render()"></td><td>${e.f}</td><td>${e.ds}</td><td class="n">${l.d?m(l.d):""}</td><td class="n">${l.h?m(l.h):""}</td></tr>`)}}));
+const df=r2(S.ext-cn);
+return`<div class="card"><h2>Flujo de efectivo (caja y bancos)</h2><div class="tw"><table><thead><tr><th>Mes</th><th class="n">Entradas</th><th class="n">Salidas</th><th class="n">Neto</th><th class="n">Saldo</th></tr></thead><tbody>${fl||'<tr><td colspan="5" class="mu">Sin movimientos</td></tr>'}</tbody></table></div></div>
+<div class="card"><h2>Conciliación bancaria</h2><div class="row"><label>Saldo según extracto <input type="number" step="0.01" value="${S.ext}" style="width:120px" onchange="S.ext=+this.value;save();render()"></label></div><p>Saldo en libros: <b>${m(lib)}</b> · Conciliado: <b>${m(cn)}</b> · Diferencia: <b class="${df===0?"ok":"er"}">${m(df)}</b></p><p class="mu">Marca los movimientos que ya aparecen en tu extracto bancario.</p><div class="tw"><table><thead><tr><th></th><th>Fecha</th><th>Descripción</th><th class="n">Entrada</th><th class="n">Salida</th></tr></thead><tbody>${B.join("")||'<tr><td colspan="5" class="mu">Sin movimientos en Bancos</td></tr>'}</tbody></table></div></div>`},
+fin(){const s=saldos(),T=t=>Object.values(s).filter(x=>x.a.t===t).reduce((a,x)=>a+sal(x),0),P=pre=>Object.values(s).filter(x=>x.a.c.startsWith(pre)).reduce((a,x)=>a+sal(x),0);
+const A=T("A"),PA=T("P"),I=T("I"),G=T("G"),U=I-G,PT=T("Pt")+U,AC=P("1.1"),PC=P("2.1"),INV=sal(s["1.1.04"]),CV=sal(s["5.1.01"]);
+const d=(a,b,f)=>b?f(a/b):"—",x2=v=>v.toFixed(2),pc=v=>(v*100).toFixed(1)+"%";
+const R=[["Liquidez corriente",d(AC,PC,x2),"Activo corriente / pasivo corriente. Mayor a 1 indica que puedes cubrir tus deudas de corto plazo."],["Prueba ácida",d(AC-INV,PC,x2),"Liquidez sin contar el inventario."],["Capital de trabajo",m(AC-PC),"Lo que te queda de corto plazo tras pagar deudas."],["Endeudamiento",d(PA,A,pc),"Parte de tus activos financiada con deudas."],["Solvencia patrimonial",d(PT,A,pc),"Parte de tus activos que es realmente tuya."],["Margen bruto",d(I-CV,I,pc),"(Ventas − costo) / ventas."],["Margen neto",d(U,I,pc),"Utilidad / ingresos."],["Rentabilidad patrimonial (ROE)",d(U,PT,pc),"Utilidad / patrimonio."]];
+const se=serie(),u12=se.slice(-12),mx=Math.max(1,...u12.map(z=>Math.max(z.ing,z.gas))),w=600/Math.max(u12.length,1);
+const ch=u12.map((z,i)=>`<rect x="${i*w+w*.1}" y="${160-z.ing/mx*140}" width="${w*.35}" height="${z.ing/mx*140}" style="fill:var(--ok)"/><rect x="${i*w+w*.5}" y="${160-z.gas/mx*140}" width="${w*.35}" height="${z.gas/mx*140}" style="fill:var(--er)"/><text x="${i*w+w*.5}" y="176" font-size="11" text-anchor="middle" style="fill:var(--mu)">${z.k.slice(2)}</text>`).join("");
+const al=[];if(se.length>=3){const p=se.slice(0,-1),l=se[se.length-1],ag=p.reduce((a,z)=>a+z.gas,0)/p.length,ai=p.reduce((a,z)=>a+z.ing,0)/p.length;if(ag>0&&l.gas>ag*1.5)al.push("Los gastos de "+l.k+" ("+m(l.gas)+") superan en más de 50% su promedio anterior ("+m(ag)+").");if(ai>0&&l.ing<ai*.7)al.push("Los ingresos de "+l.k+" cayeron más de 30% frente a su promedio ("+m(ai)+").")}
+if(sal(s["1.1.01"])<0)al.push("La cuenta Caja tiene saldo negativo: revisa tus registros.");if(sal(s["1.1.02"])<0)al.push("Bancos tiene saldo negativo (posible sobregiro o error).");if(PC>AC&&PC>0)al.push("Tus deudas de corto plazo superan tu activo corriente.");
+let pj="";if(se.length>=2){const l3=se.slice(-3),au=l3.reduce((a,z)=>a+z.u,0)/l3.length;let ac=A>0?0:0;pj=`<p class="mu">Proyección simple: utilidad mensual promedio de los últimos ${l3.length} meses = <b>${m(au)}</b>; en 3 meses acumularías ${m(au*3)}. No es una predicción.</p>`}
+return`<div class="card"><h2>Indicadores financieros</h2><div class="tw"><table>${R.map(r=>`<tr><td><b>${r[0]}</b><br><small class="mu">${r[2]}</small></td><td class="n"><b>${r[1]}</b></td></tr>`).join("")}</table></div></div>
+<div class="card"><h2>Alertas</h2>${al.length?al.map(t=>`<p class="er">⚠ ${t}</p>`).join(""):'<p class="ok">Sin movimientos inusuales detectados.</p>'}<p class="mu">Las alertas de ingresos y gastos requieren al menos 3 meses de historial.</p></div>
+<div class="card"><h2>Evolución mensual</h2>${u12.length?`<svg viewBox="0 0 600 182" width="100%">${ch}</svg><p class="mu"><span class="ok">■</span> Ingresos &nbsp; <span class="er">■</span> Gastos</p>`:'<p class="mu">Sin datos</p>'}</div>
+<div class="card"><h2>Comparación de períodos</h2><div class="tw"><table><thead><tr><th>Mes</th><th class="n">Ingresos</th><th class="n">Var.</th><th class="n">Gastos</th><th class="n">Var.</th><th class="n">Resultado</th></tr></thead><tbody>${se.map((z,i)=>{const q=se[i-1],v=(a,b)=>q&&b?((a-b)/b*100).toFixed(0)+"%":"—";return`<tr><td>${z.k}</td><td class="n">${m(z.ing)}</td><td class="n">${v(z.ing,q&&q.ing)}</td><td class="n">${m(z.gas)}</td><td class="n">${v(z.gas,q&&q.gas)}</td><td class="n ${z.u>=0?"ok":"er"}">${m(z.u)}</td></tr>`}).join("")||'<tr><td colspan="6" class="mu">Sin datos</td></tr>'}</tbody></table></div>${pj}</div>`},
+pres(){const se=serie(),hoy=new Date().toISOString().slice(0,7),ks=[...new Set([...se.map(z=>z.k),hoy])].sort(),k=pm&&ks.includes(pm)?pm:ks[ks.length-1],o=mesv(k);
+const rows=S.plan.filter(a=>a.t==="I"||a.t==="G").map(a=>{const b=S.pres[a.c]||0,v=o[a.c]||0,r=a.t==="I"?-v:v,df=a.t==="I"?r-b:b-r;return`<tr><td>${a.n}</td><td>${a.t==="I"?"Ingreso":"Gasto"}</td><td class="n"><input type="number" step="0.01" value="${b||""}" style="width:90px" onchange="S.pres['${a.c}']=+this.value;save();render()"></td><td class="n">${m(r)}</td><td class="n ${df<0&&b?"er":"ok"}">${b?m(df):"—"}</td><td class="n">${b?(r/b*100).toFixed(0)+"%":"—"}</td><td class="n">${m(b*12)}</td></tr>`}).join("");
+return`<div class="card"><h2>Presupuesto mensual</h2><div class="row"><label>Mes <select onchange="pm=this.value;render()">${ks.map(x=>`<option ${x===k?"selected":""}>${x}</option>`).join("")}</select></label></div><p class="mu">Ingresa el presupuesto mensual por cuenta. La diferencia es favorable en verde y desfavorable en rojo (gasto sobre lo presupuestado o ingreso por debajo).</p><div class="tw"><table><thead><tr><th>Cuenta</th><th>Tipo</th><th class="n">Presupuesto</th><th class="n">Real</th><th class="n">Diferencia</th><th class="n">Ejecución</th><th class="n">Anual</th></tr></thead><tbody>${rows}</tbody></table></div></div>`},
+ter(){const sd=id=>S.docs.filter(d=>d.ter==id).reduce((a,d)=>a+pend(d),0);return`<div class="card"><h2>Nuevo cliente o proveedor</h2><div class="row"><select id="tt"><option value="c">Cliente</option><option value="p">Proveedor</option></select><input id="tn" placeholder="Nombre o razón social" style="flex:1;min-width:150px"><input id="tr" placeholder="RUC / cédula" style="width:140px"><button class="btn" onclick="addTer()">Agregar</button></div></div><div class="card"><div class="tw"><table><thead><tr><th>Tipo</th><th>Nombre</th><th>RUC</th><th class="n">Saldo pendiente</th></tr></thead><tbody>${S.ter.map(x=>`<tr><td>${x.t==="c"?"Cliente":"Proveedor"}</td><td>${x.n}</td><td>${x.r}</td><td class="n">${m(sd(x.id))}</td></tr>`).join("")||'<tr><td colspan="4" class="mu">Sin registros</td></tr>'}</tbody></table></div></div>`},
+ajustes(){return`<div class="card"><h2>Ajustes</h2>
+<div class="row"><label>Tarifa de IVA (%) <input type="number" value="${S.iva}" style="width:70px" onchange="S.iva=+this.value;save()"></label></div>
+<p class="mu">La tarifa es configurable: verifica la vigente en el SRI (sri.gob.ec) antes de usarla.</p>
+<div class="row"><button class="btn g" onclick="demo()">Cargar datos de demostración</button><button class="btn g" onclick="exp()">Exportar respaldo (JSON)</button><button class="btn r" onclick="borrar()">Borrar todo</button></div>
+<p class="mu">Fase actual: núcleo contable (plan de cuentas, partida doble, diario, mayor, balances). Pendiente: clientes y proveedores, retenciones SRI, inventario, activos fijos, usuarios con roles, PDF/Excel, trámites. Los datos se guardan solo en este navegador; para varios usuarios se necesita backend.</p></div>`}
+};
+function inv(){const o={};S.prod.forEach(p=>o[p.id]={p,q:0,v:0});S.docs.forEach(d=>{const x=o[d.p];if(!x)return;if(d.tipo==="compra"){x.q+=d.q;x.v+=d.b}else{x.q-=d.q;x.v-=d.q*d.cu}});return o}
+function pend(d){return r2(d.t-d.ab.reduce((a,b)=>a+b.v,0))}
+function asiento(f,ds,L,mv){const n=S.as.reduce((a,e)=>Math.max(a,e.n),0)+1;S.as.push({n,f,ds,mv,l:L.filter(l=>l[1]||l[2]).map(l=>({c:l[0],d:r2(l[1]),h:r2(l[2])}))})}
+function regDoc(tipo){const v=tipo==="venta",ter=$("dt").value,p=$("dp").value,q=+$("dq").value,pu=+$("du").value,fp=$("df").value,f=$("dfe").value;
+if(!ter||!p||!(q>0)||!(pu>=0)||$("du").value===""){alert("Completa tercero, producto, cantidad y precio");return}
+if(S.cerrado&&f<=S.cerrado){alert("Período cerrado hasta "+S.cerrado);return}
+const b=r2(q*pu),iv=r2(b*S.iva/100),t=r2(b+iv),pg=fp==="c"?"1.1.01":fp==="b"?"1.1.02":(v?"1.1.03":"2.1.01");
+let cu=0;if(v){const x=inv()[p];cu=x.q>0?x.v/x.q:0;if(x.q<q&&!confirm("Stock insuficiente ("+x.q+"). ¿Registrar igual?"))return}
+if(!confirm((v?"Venta":"Compra")+" por "+m(t)+" (base "+m(b)+" + IVA "+m(iv)+"). Se generará el asiento contable. ¿Confirmar?"))return;
+const nom=(S.ter.find(x=>x.id==ter)||{}).n;
+const L=v?[[pg,t,0],["4.1.01",0,b],["2.1.02",0,iv],["5.1.01",q*cu,0],["1.1.04",0,q*cu]]:[["1.1.04",b,0],["1.1.05",iv,0],[pg,0,t]];
+asiento(f,(v?"Venta a ":"Compra a ")+nom,L);
+S.docs.push({id:Date.now(),tipo,f,ter,p,q,pu,b,iv,t,fp,venc:$("dv").value,cu:r2(cu),ab:fp==="k"?[]:[{f,v:t}]});save();render()}
+function abonar(id){const d=S.docs.find(x=>x.id===id),pd=pend(d),v=r2(+prompt("Valor del abono (pendiente "+m(pd)+")",pd));
+if(!(v>0)||v>pd){alert("Valor inválido");return}const f=new Date().toISOString().slice(0,10);
+if(S.cerrado&&f<=S.cerrado){alert("Período cerrado");return}
+asiento(f,(d.tipo==="venta"?"Cobro de ":"Pago de ")+"factura",d.tipo==="venta"?[["1.1.01",v,0],["1.1.03",0,v]]:[["2.1.01",v,0],["1.1.01",0,v]]);d.ab.push({f,v});save();render()}
+function addProd(){const n=$("pn2").value.trim();if(!n){alert("Nombre requerido");return}S.prod.push({id:Date.now(),n,pv:+$("pv2").value||0,min:+$("pm2").value||0});save();render()}
+function addTer(){const n=$("tn").value.trim(),r=$("tr").value.trim();if(!n){alert("Nombre requerido");return}if(r&&!/^\d{10}(\d{3})?$/.test(r)&&!confirm("El RUC debe tener 13 dígitos y la cédula 10. ¿Guardar igual?"))return;S.ter.push({id:Date.now(),t:$("tt").value,n,r});save();render()}
+let pm="";function mesv(k){const o={};S.as.filter(e=>!k||e.f.slice(0,7)===k).forEach(e=>e.l.forEach(l=>{o[l.c]=(o[l.c]||0)+l.d-l.h}));return o}
+function serie(){const ks=[...new Set(S.as.map(e=>e.f.slice(0,7)))].sort();return ks.map(k=>{const o=mesv(k);let ing=0,gas=0;S.plan.forEach(a=>{const v=o[a.c]||0;if(a.t==="I")ing-=v;if(a.t==="G")gas+=v});return{k,ing:r2(ing),gas:r2(gas),u:r2(ing-gas)}})}
+const CATS={i:[["4.1.02","Otros ingresos"],["3.1.01","Aporte de capital"]],e:[["5.2.01","Sueldos y salarios"],["5.2.02","Arriendo"],["5.2.03","Servicios básicos"],["5.2.04","Otros gastos"]]};let kp="";
+function catSel(){$("mcat").innerHTML=CATS[$("mt").value].map(c=>`<option value="${c[0]}">${c[1]}</option>`).join("")}
+function regMov(){const t=$("mt").value,c=$("mcat").value,v=r2(+$("mv").value),f=$("mfe").value,bk=$("mb").value==="b"?"1.1.02":"1.1.01",o=$("mor").value.trim(),co=$("mco").value.trim();
+if(!(v>0)||!f){alert("Fecha y valor requeridos");return}
+if(S.cerrado&&f<=S.cerrado){alert("Período cerrado hasta "+S.cerrado);return}
+if(!confirm((t==="i"?"Ingreso":"Egreso")+" de "+m(v)+": Debe "+nm(t==="i"?bk:c)+" / Haber "+nm(t==="i"?c:bk)+". ¿Confirmar?"))return;
+asiento(f,(t==="i"?"Ingreso: ":"Egreso: ")+nm(c).slice(7)+(o?" – "+o:"")+(co?" ("+co+")":""),t==="i"?[[bk,v,0],[c,0,v]]:[[c,v,0],[bk,0,v]],{t,c});save();render()}
+function kardex(){const o=inv(),id=kp&&o[kp]?kp:"";let q=0,v=0;const rows=S.docs.filter(d=>d.p==id).map(d=>{const c=d.tipo==="compra",val=c?d.b:d.q*d.cu;q+=c?d.q:-d.q;v+=c?val:-val;return`<tr><td>${d.f}</td><td>${c?"Entrada":"Salida"}</td><td class="n">${d.q}</td><td class="n">${m(val)}</td><td class="n">${q}</td><td class="n">${m(v)}</td></tr>`}).join("");
+return`<div class="card"><h2>Kardex</h2><select onchange="kp=this.value;render()"><option value="">Selecciona producto…</option>${S.prod.map(p=>`<option value="${p.id}" ${p.id==id?"selected":""}>${p.n}</option>`).join("")}</select>${id?`<div class="tw"><table><thead><tr><th>Fecha</th><th>Mov.</th><th class="n">Cant.</th><th class="n">Valor</th><th class="n">Saldo cant.</th><th class="n">Saldo valor</th></tr></thead><tbody>${rows||'<tr><td colspan="6" class="mu">Sin movimientos</td></tr>'}</tbody></table></div>`:""}</div>`}
+function sugerir(){const b=+$("mb").value,iv=r2(b*(+$("iv").value||0)/100),t=r2(b+iv),op=$("op").value,fp=$("fp").value;
+if(!(b>0)){alert("Ingresa un valor mayor a 0");return}
+const pago=fp==="c"?"1.1.01":fp==="b"?"1.1.02":null;let L=[],w="";
+if(op==="compra"){const h=pago||"2.1.01";L=[[ "1.1.04",b,0],["1.1.05",iv,0],[h,0,t]];w="Compras de mercadería aumentan el Inventario (activo, Debe); el IVA pagado es crédito tributario (activo, Debe); se paga con "+nm(h)+" (Haber)."}
+if(op==="venta"){const d=pago||"1.1.03";L=[[d,t,0],["4.1.01",0,b],["2.1.02",0,iv]];w="Cobras o generas deuda del cliente (Debe), reconoces Ventas (ingreso, Haber) y el IVA cobrado es una obligación con el SRI (Haber)."}
+if(op==="gasto"){const h=pago||"2.1.01";L=[["5.2.04",b,0],["1.1.05",iv,0],[h,0,t]];w="El gasto aumenta (Debe), el IVA es crédito tributario (Debe) y sale dinero o se genera deuda (Haber). Cambia la cuenta de gasto si corresponde."}
+if(op==="cobro"){L=[[pago||"1.1.01",b,0],["1.1.03",0,b]];w="Entra dinero (Debe) y disminuye lo que el cliente te debe (Haber)."}
+if(op==="pago"){L=[["2.1.01",b,0],[pago||"1.1.01",0,b]];w="Disminuye lo que debes al proveedor (Debe) y sale dinero (Haber)."}
+draft=L.filter(l=>l[1]||l[2]).map(l=>({c:l[0],d:l[1],h:l[2]}));dh=$("op").selectedOptions[0].text;$("ds").value=dh;$("why").textContent="Razonamiento: "+w;drawDraft()}
+function drawDraft(){const op=S.plan.map(a=>`<option value="${a.c}">${a.c} ${a.n}</option>`).join("");
+$("dl").innerHTML=draft.map((l,i)=>`<tr><td><select onchange="draft[${i}].c=this.value">${op.replace(`value="${l.c}"`,`value="${l.c}" selected`)}</select></td><td><input type="number" step="0.01" value="${l.d||""}" style="width:100px" onchange="draft[${i}].d=+this.value;drawDraft()"></td><td><input type="number" step="0.01" value="${l.h||""}" style="width:100px" onchange="draft[${i}].h=+this.value;drawDraft()"></td><td><button class="btn r" style="padding:2px 8px" onclick="draft.splice(${i},1);drawDraft()">×</button></td></tr>`).join("");
+const D=r2(draft.reduce((a,l)=>a+(+l.d||0),0)),H=r2(draft.reduce((a,l)=>a+(+l.h||0),0));
+$("cu").innerHTML=`<span class="${D===H&&D>0?"ok":"er"}">Debe ${m(D)} · Haber ${m(H)} ${D===H&&D>0?"✔":"✘ descuadrado"}</span>`}
+function addL(){draft.push({c:S.plan[0].c,d:0,h:0});drawDraft()}
+function confirmar(){const L=draft.map(l=>({c:l.c,d:r2(+l.d||0),h:r2(+l.h||0)})).filter(l=>l.d||l.h);
+const D=r2(L.reduce((a,l)=>a+l.d,0)),H=r2(L.reduce((a,l)=>a+l.h,0));
+if(L.length<2||D!==H){alert("El asiento debe tener al menos 2 líneas y Debe = Haber.");return}
+const f=$("fe").value;if(S.cerrado&&f<=S.cerrado){alert("Período cerrado hasta "+S.cerrado);return}
+const n=(S.as.reduce((a,e)=>Math.max(a,e.n),0))+1;S.as.push({n,f,ds:$("ds").value,l:L});save();draft=[];dh="";go("diario")}
+function anular(n){if(confirm("¿Anular el asiento "+n+"? Esta acción queda solo en este navegador.")){S.as=S.as.filter(e=>e.n!==n);save();render()}}
+function addCta(){const c=$("pc").value.trim(),n=$("pn").value.trim();if(!c||!n||S.plan.some(a=>a.c===c)){alert("Código y nombre requeridos; el código no puede repetirse");return}S.plan.push({c,n,t:$("pt").value});S.plan.sort((a,b)=>a.c.localeCompare(b.c,undefined,{numeric:true}));save();render()}
+function demo(){if(S.as.length&&!confirm("Se agregarán asientos de demostración a los existentes. ¿Continuar?"))return;S.demo=true;const d="2026-11-";
+[[1,"Aporte inicial de capital (DEMO)",[["1.1.02",5000,0],["3.1.01",0,5000]]],[3,"Compra de mercadería (DEMO)",[["1.1.04",1000,0],["1.1.05",150,0],["1.1.01",0,1150]]],[8,"Venta al contado (DEMO)",[["1.1.01",1725,0],["4.1.01",0,1500],["2.1.02",0,225]]],[8,"Costo de la venta (DEMO)",[["5.1.01",700,0],["1.1.04",0,700]]],[12,"Pago de arriendo (DEMO)",[["5.2.02",300,0],["1.1.01",0,300]]]].forEach(x=>{const n=S.as.reduce((a,e)=>Math.max(a,e.n),0)+1;S.as.push({n,f:d+String(x[0]).padStart(2,"0"),ds:x[1],l:x[2].map(l=>({c:l[0],d:l[1],h:l[2]}))})});save();go("panel")}
+function exp(){const a=document.createElement("a");a.href="data:application/json;charset=utf-8,"+encodeURIComponent(JSON.stringify(S));a.download="respaldo-contaec.json";a.click()}
+function borrar(){if(confirm("Se borrarán todos los datos de este navegador. ¿Seguro?")){S={demo:false,iva:15,plan:PLAN0.map(a=>({c:a[0],n:a[1],t:a[2]})),as:[],cerrado:"",ter:[],prod:[],docs:[],conc:{},ext:0,pres:{}};save();go("panel")}}
+render();
+</script></body></html>
